@@ -161,6 +161,12 @@ public class CoinDefinition {
             "digitalcoin.co",
             "game.digitalcoin.co",
             "dev.digitalcoin.co",
+            "104.255.33.198",// - Digitalcoin Foundation - United States (donations accepted here)
+            "185.81.167.177",// - Digitalcoin Foundation - Romania (donations accepted here)
+            "23.227.190.181",// - Digitalcoin Foundation - United States ( donations accepted here)
+            "66.207.140.12",// - Tsquared - United States
+            "5.196.8.21",//- BatesResearch - France
+            "178.237.35.34" //- samson - Belgium
      };
 
     public static int minBroadcastConnections = 1;   //0 for default; we need more peers.
