@@ -86,7 +86,7 @@ public class CoinDefinition {
             return INTERVAL;      //108
     }
     public static final int getIntervalCheckpoints() {
-            return INTERVAL_0;    //1080
+            return INTERVAL_0*3;    //1080
 
     }
     public static final int getTargetTimespan(int height, boolean testNet) {
