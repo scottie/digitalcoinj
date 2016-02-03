@@ -7,3 +7,8 @@ target
 Thumbs.db
 obj/
 libs/
+*.chain
+*.spvchain
+*.wallet
+*.bak
+*.db
