@@ -1,120 +1,134 @@
-package org.digitalcoinj;
+/*
+ * Copyright 2013 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.bitcoinj.params;
+
+import java.math.BigInteger;
 
 import com.lambdaworks.crypto.SCrypt;
 import org.bitcoinj.core.*;
-import org.bitcoinj.params.MainNetParams;
-import org.bitcoinj.params.Networks;
-import org.bitcoinj.params.TestNet3Params;
-import org.bitcoinj.script.Script;
-import org.bitcoinj.script.ScriptOpCodes;
+import org.bitcoinj.utils.MonetaryFormat;
 import org.bitcoinj.store.BlockStore;
 import org.bitcoinj.store.BlockStoreException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayOutputStream;
-import java.math.BigInteger;
-
-import static com.google.common.base.Preconditions.checkState;
 import static com.hashengineering.crypto.X11.x11Digest;
 
 /**
- * Created by HashEngineering on 1/11/15.
+ * Parameters for Bitcoin-like networks.
  */
-public class DigitalcoinParams extends NetworkParameters {
-    private static final Logger log = LoggerFactory.getLogger(AbstractBlockChain.class);
+public abstract class AbstractBitcoinNetParams extends NetworkParameters {
+    /**
+     * Scheme part for Bitcoin URIs.
+     */
+    public static final String BITCOIN_SCHEME = "bitcoin";
 
-    public DigitalcoinParams() {
+    private static final Logger log = LoggerFactory.getLogger(AbstractBitcoinNetParams.class);
+
+    public AbstractBitcoinNetParams() {
         super();
-        interval = INTERVAL;
-        targetTimespan = TARGET_TIMESPAN;
-        maxTarget = CoinDefinition.proofOfWorkLimit;
-        dumpedPrivateKeyHeader = 128 + CoinDefinition.AddressHeader;
-        addressHeader = CoinDefinition.AddressHeader;
-        p2shHeader = CoinDefinition.p2shHeader;
-        acceptableAddressCodes = new int[] { addressHeader, p2shHeader};
-
-        port = CoinDefinition.Port;
-        packetMagic = CoinDefinition.PacketMagic;
-        genesisBlock.setDifficultyTarget(CoinDefinition.genesisBlockDifficultyTarget);
-        genesisBlock.setTime(CoinDefinition.genesisBlockTime);
-        genesisBlock.setNonce(CoinDefinition.genesisBlockNonce);
-        id = ID_MAINNET;
-        subsidyDecreaseBlockCount = CoinDefinition.subsidyDecreaseBlockCount;
-        spendableCoinbaseDepth = CoinDefinition.spendableCoinbaseDepth;
-
-        createGenesis();
-
-        String genesisHash = genesisBlock.getHashAsString();
-        checkState(genesisHash.equals(CoinDefinition.genesisHash),
-                genesisHash);
-
-        CoinDefinition.initCheckpoints(checkpoints);
-
-        dnsSeeds = CoinDefinition.dnsSeeds;
-
-        Networks.unregister(MainNetParams.get());
-        Networks.unregister(TestNet3Params.get());
-
-        Networks.register(this);
-
     }
-    private static DigitalcoinParams instance;
-    public static synchronized DigitalcoinParams get() {
-        if (instance == null) {
-            instance = new DigitalcoinParams();
+
+    /** 
+     * Checks if we are at a difficulty transition point. 
+     * @param storedPrev The previous stored block 
+     * @return If this is a difficulty transition point 
+     */
+    protected boolean isDifficultyTransitionPoint(StoredBlock storedPrev) {
+        return ((storedPrev.getHeight() + 1) % this.getInterval()) == 0;
+    }
+
+
+    /*@Override
+    public void checkDifficultyTransitions(final StoredBlock storedPrev, final Block nextBlock,
+    	final BlockStore blockStore) throws VerificationException, BlockStoreException {
+        Block prev = storedPrev.getHeader();
+
+        // Is this supposed to be a difficulty transition point?
+        if (!isDifficultyTransitionPoint(storedPrev)) {
+
+            // No ... so check the difficulty didn't actually change.
+            if (nextBlock.getDifficultyTarget() != prev.getDifficultyTarget())
+                throw new VerificationException("Unexpected change in difficulty at height " + storedPrev.getHeight() +
+                        ": " + Long.toHexString(nextBlock.getDifficultyTarget()) + " vs " +
+                        Long.toHexString(prev.getDifficultyTarget()));
+            return;
         }
-        return instance;
-    }
 
-    public String getPaymentProtocolId() {
-        return PAYMENT_PROTOCOL_ID_MAINNET;
-    }
-
-    //TODO:  put these bytes into the CoinDefinition
-    private void createGenesis() {
-        //Block genesisBlock = new Block(n);
-        genesisBlock.removeTransaction(0);
-        Transaction t = new Transaction(this);
-        try {
-            // A script containing the difficulty bits and the following message:
-            //
-
-            //   coin dependent
-            //   "Digitalcoin, A Currency for a Digital Age"
-            byte[] bytes = Utils.HEX.decode(CoinDefinition.genesisTxInBytes);
-            //byte[] bytes = Hex.decode("04ffff001d0104294469676974616c636f696e2c20412043757272656e637920666f722061204469676974616c20416765");
-            t.addInput(new TransactionInput(this, t, bytes));
-            ByteArrayOutputStream scriptPubKeyBytes = new ByteArrayOutputStream();
-            Script.writeBytes(scriptPubKeyBytes, Utils.HEX.decode(CoinDefinition.genesisTxOutBytes));
-            //("04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f"));
-            scriptPubKeyBytes.write(ScriptOpCodes.OP_CHECKSIG);
-            t.addOutput(new TransactionOutput(this, t, Coin.valueOf(CoinDefinition.genesisBlockValue, 0), scriptPubKeyBytes.toByteArray()));
-        } catch (Exception e) {
-            // Cannot happen.
-            throw new RuntimeException(e);
+        // We need to find a block far back in the chain. It's OK that this is expensive because it only occurs every
+        // two weeks after the initial block chain download.
+        long now = System.currentTimeMillis();
+        StoredBlock cursor = blockStore.get(prev.getHash());
+        for (int i = 0; i < this.getInterval() - 1; i++) {
+            if (cursor == null) {
+                // This should never happen. If it does, it means we are following an incorrect or busted chain.
+                throw new VerificationException(
+                        "Difficulty transition point but we did not find a way back to the genesis block.");
+            }
+            cursor = blockStore.get(cursor.getHeader().getPrevBlockHash());
         }
-        genesisBlock.addTransaction(t);
-        //return genesisBlock;
-    }
+        long elapsed = System.currentTimeMillis() - now;
+        if (elapsed > 50)
+            log.info("Difficulty transition traversal took {}msec", elapsed);
 
+        Block blockIntervalAgo = cursor.getHeader();
+        int timespan = (int) (prev.getTimeSeconds() - blockIntervalAgo.getTimeSeconds());
+        // Limit the adjustment step.
+        final int targetTimespan = this.getTargetTimespan();
+        if (timespan < targetTimespan / 4)
+            timespan = targetTimespan / 4;
+        if (timespan > targetTimespan * 4)
+            timespan = targetTimespan * 4;
+
+        BigInteger newTarget = Utils.decodeCompactBits(prev.getDifficultyTarget());
+        newTarget = newTarget.multiply(BigInteger.valueOf(timespan));
+        newTarget = newTarget.divide(BigInteger.valueOf(targetTimespan));
+
+        if (newTarget.compareTo(this.getMaxTarget()) > 0) {
+            log.info("Difficulty hit proof of work limit: {}", newTarget.toString(16));
+            newTarget = this.getMaxTarget();
+        }
+
+        int accuracyBytes = (int) (nextBlock.getDifficultyTarget() >>> 24) - 3;
+        long receivedTargetCompact = nextBlock.getDifficultyTarget();
+
+        // The calculated difficulty is to a higher precision than received, so reduce here.
+        BigInteger mask = BigInteger.valueOf(0xFFFFFFL).shiftLeft(accuracyBytes * 8);
+        newTarget = newTarget.and(mask);
+        long newTargetCompact = Utils.encodeCompactBits(newTarget);
+
+        if (newTargetCompact != receivedTargetCompact)
+            throw new VerificationException("Network provided difficulty bits do not match what was calculated: " +
+                    newTargetCompact + " vs " + receivedTargetCompact);
+    }*/
     @Override
-    public boolean checkDifficultyTransitions(StoredBlock storedPrev, Block nextBlock, BlockStore blockStore) throws BlockStoreException, VerificationException {
+    public void checkDifficultyTransitions(StoredBlock storedPrev, Block nextBlock, BlockStore blockStore) throws BlockStoreException, VerificationException {
         if (this.getId().equals(NetworkParameters.ID_TESTNET))
         {
             Block prev = storedPrev.getHeader();
             checkTestnetDifficulty(storedPrev, prev, nextBlock, blockStore);
-            return true;
         }
         else if(storedPrev.getHeight()+1 < CoinDefinition.V3_FORK)
         {
             checkDifficultyTransitionsV1(storedPrev,nextBlock, blockStore);
-            return true;
         }
         else
         {
             checkDifficultyTransitionsV2(storedPrev, nextBlock, blockStore);
-            return true;
         }
 
 
@@ -265,15 +279,13 @@ public class DigitalcoinParams extends NetworkParameters {
 
 
         StoredBlock first = storedPrev;
-        for (int i = 0; first != null && i < NUM_ALGOS * nAveragingInterval; i++)
-        {
+        for (int i = 0; first != null && i < NUM_ALGOS * nAveragingInterval; i++) {
             first = first.getPrev(blockStore);
         }
-        if(first == null)
+        if (first == null)
             return; //using checkpoints file
         StoredBlock lastBlockSolved = GetLastBlockForAlgo(storedPrev, algo, blockStore);
-        if(lastBlockSolved == null)
-        {
+        if (lastBlockSolved == null) {
             //verifyDifficulty(storedPrev.getHeader().getDifficultyTargetAsInteger(), storedPrev, nextBlock, algo);
             return;
         }
@@ -282,9 +294,8 @@ public class DigitalcoinParams extends NetworkParameters {
         // Limit adjustment step
         // Use medians to prevent time-warp attacks
         try {
-
             long nActualTimespan = blockStore.getMedianTimePast(storedPrev) - blockStore.getMedianTimePast(first);
-            nActualTimespan = nAveragingTargetTimespan + (nActualTimespan - nAveragingTargetTimespan)/6;
+            nActualTimespan = nAveragingTargetTimespan + (nActualTimespan - nAveragingTargetTimespan) / 6;
             //LogPrintf("  nActualTimespan = %d before bounds\n", nActualTimespan);
             if (nActualTimespan < nMinActualTimespan)
                 nActualTimespan = nMinActualTimespan;
@@ -300,20 +311,16 @@ public class DigitalcoinParams extends NetworkParameters {
 
             // Per-algo retarget
             int nAdjustments = lastBlockSolved.getHeight() - storedPrev.getHeight() + NUM_ALGOS - 1;
-            if (nAdjustments > 0)
-            {
-                for (int i = 0; i < nAdjustments; i++)
-                {
+            if (nAdjustments > 0) {
+                for (int i = 0; i < nAdjustments; i++) {
                     //bnNew /= 100 + nLocalDifficultyAdjustment;
                     newDifficulty = newDifficulty.divide(BigInteger.valueOf(100 + nLocalDifficultyAdjustment));
                     //bnNew *= 100;
                     newDifficulty = newDifficulty.multiply(BigInteger.valueOf(100));
                 }
             }
-            if (nAdjustments < 0)
-            {
-                for (int i = 0; i < -nAdjustments; i++)
-                {
+            if (nAdjustments < 0) {
+                for (int i = 0; i < -nAdjustments; i++) {
                     //bnNew *= 100 + nLocalDifficultyAdjustment;
                     newDifficulty = newDifficulty.multiply(BigInteger.valueOf(100 + nLocalDifficultyAdjustment));
                     //bnNew /= 100;
@@ -322,12 +329,11 @@ public class DigitalcoinParams extends NetworkParameters {
             }
 
             verifyDifficulty(newDifficulty, storedPrev, nextBlock, algo);
-        }
-        catch (BlockStoreException x)
-        {
-            return; //checkpoints file being used.
+        } catch (BlockStoreException x) {
+            //loading from checkpoints
         }
     }
+
     private void verifyDifficulty(BigInteger calcDiff, StoredBlock storedPrev, Block nextBlock, int algo)
     {
         if (calcDiff.compareTo(CoinDefinition.getProofOfWorkLimit(algo)) > 0) {
@@ -345,64 +351,37 @@ public class DigitalcoinParams extends NetworkParameters {
             throw new VerificationException("Network provided difficulty bits do not match what was calculated: " +
                     receivedDifficulty.toString(16) + " vs " + calcDiff.toString(16));
     }
-    @Override
+
     public boolean checkTestnetDifficulty(StoredBlock storedPrev, Block prev, Block next, BlockStore blockStore) throws VerificationException, BlockStoreException {
-         verifyDifficulty(Utils.decodeCompactBits(0x1d13ffec), storedPrev, next, getAlgo(next));
+        verifyDifficulty(Utils.decodeCompactBits(0x1d13ffec), storedPrev, next, getAlgo(next));
         return true;
     }
 
-    //main.cpp GetBlockValue(height, fee)
-    public Coin getBlockInflation(int height)
-    {
-
-        Coin subsidy = Coin.valueOf(15, 0);
-
-        if(height < 1080)
-        {
-            subsidy = Coin.valueOf(2, 0); //2
-        }
-        else if(height < 2160)
-        {
-            subsidy   = Coin.valueOf(1, 0); //2
-        }
-        else if(height < 3240)
-        {
-            subsidy   = Coin.valueOf(2, 0); //2
-        }
-        else if(height < 4320)
-        {
-            subsidy  = Coin.valueOf(5, 0); //5
-        }
-        else if(height < 5400)
-        {
-            subsidy  = Coin.valueOf(8, 0); //8
-        }
-        else if(height < 6480)
-        {
-            subsidy = Coin.valueOf(11, 0); //11
-        }
-        else if(height < 7560)
-        {
-            subsidy  = Coin.valueOf(14, 0); //14
-        }
-        else if(height < 8640)
-        {
-            subsidy = Coin.valueOf(17, 0); //17
-        }
-        else if(height < 523800)
-        {
-            subsidy = Coin.valueOf(20, 0); //20
-        }
-        else if(height >= CoinDefinition.V3_FORK)
-        {
-            subsidy = Coin.valueOf(5, 0); //5;
-        }
-        else
-        {
-            return subsidy.shiftRight(height / subsidyDecreaseBlockCount);
-        }
-        return subsidy;
+    @Override
+    public Coin getMaxMoney() {
+        return MAX_MONEY;
     }
+
+    @Override
+    public Coin getMinNonDustOutput() {
+        return Transaction.MIN_NONDUST_OUTPUT;
+    }
+
+    @Override
+    public MonetaryFormat getMonetaryFormat() {
+        return new MonetaryFormat();
+    }
+
+    @Override
+    public String getUriScheme() {
+        return BITCOIN_SCHEME;
+    }
+
+    @Override
+    public boolean hasMaxMoney() {
+        return true;
+    }
+
     public static final int ALGO_SHA256D = 0;
     public static final int ALGO_SCRYPT  = 1;
     public static final int ALGO_X11 = 2;
@@ -463,8 +442,8 @@ public class DigitalcoinParams extends NetworkParameters {
         return hash;
     }
     private Sha256Hash calculateScryptHash(Block block) {
-            byte [] bos = block.cloneAsHeader().bitcoinSerialize();
-            return new Sha256Hash(Utils.reverseBytes(scryptDigest(bos)));
+        byte [] bos = block.cloneAsHeader().bitcoinSerialize();
+        return new Sha256Hash(Utils.reverseBytes(scryptDigest(bos)));
     }
     private Sha256Hash calculateX11Hash(Block block) {
         byte [] bos = block.cloneAsHeader().bitcoinSerialize();
@@ -478,4 +457,58 @@ public class DigitalcoinParams extends NetworkParameters {
             return null;
         }
     }
+
+    //main.cpp GetBlockValue(height, fee)
+    public static Coin getBlockInflation(int height)
+    {
+
+        Coin subsidy = Coin.valueOf(15, 0);
+
+        if(height < 1080)
+        {
+            subsidy = Coin.valueOf(2, 0); //2
+        }
+        else if(height < 2160)
+        {
+            subsidy   = Coin.valueOf(1, 0); //2
+        }
+        else if(height < 3240)
+        {
+            subsidy   = Coin.valueOf(2, 0); //2
+        }
+        else if(height < 4320)
+        {
+            subsidy  = Coin.valueOf(5, 0); //5
+        }
+        else if(height < 5400)
+        {
+            subsidy  = Coin.valueOf(8, 0); //8
+        }
+        else if(height < 6480)
+        {
+            subsidy = Coin.valueOf(11, 0); //11
+        }
+        else if(height < 7560)
+        {
+            subsidy  = Coin.valueOf(14, 0); //14
+        }
+        else if(height < 8640)
+        {
+            subsidy = Coin.valueOf(17, 0); //17
+        }
+        else if(height < 523800)
+        {
+            subsidy = Coin.valueOf(20, 0); //20
+        }
+        else if(height >= CoinDefinition.V3_FORK)
+        {
+            subsidy = Coin.valueOf(5, 0); //5;
+        }
+        else
+        {
+            return subsidy.shiftRight(height / CoinDefinition.subsidyDecreaseBlockCount);
+        }
+        return subsidy;
+    }
+
 }

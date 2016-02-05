@@ -217,6 +217,16 @@ public class MonetaryFormatTest {
         assertEquals("d"+CoinDefinition.coinTicker+" 0", MonetaryFormat.UBTC.code(1, "d"+CoinDefinition.coinTicker).shift(1).format(Coin.ZERO).toString());
     }
 
+    /**
+     * Test clearing all codes, and then setting codes after clearing.
+     */
+    @Test
+    public void noCode() throws Exception {
+        assertEquals("0", MonetaryFormat.UBTC.noCode().shift(0).format(Coin.ZERO).toString());
+        // Ensure that inserting a code after codes are wiped, works
+        assertEquals("dBTC 0", MonetaryFormat.UBTC.noCode().code(1, "dBTC").shift(1).format(Coin.ZERO).toString());
+    }
+
     @Test
     public void codeOrientation() throws Exception {
         assertEquals(CoinDefinition.coinTicker+" 0.00", MonetaryFormat.BTC.prefixCode().format(Coin.ZERO).toString());

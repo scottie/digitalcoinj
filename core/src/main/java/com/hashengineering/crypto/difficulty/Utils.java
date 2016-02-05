@@ -2,9 +2,9 @@ package com.hashengineering.crypto.difficulty;
 
 import org.bitcoinj.core.Sha256Hash;
 import org.bitcoinj.core.StoredBlock;
+import org.bitcoinj.params.AbstractBitcoinNetParams;
 import org.bitcoinj.store.BlockStore;
 import org.bitcoinj.store.BlockStoreException;
-import org.digitalcoinj.DigitalcoinParams;
 
 /**
  * Created by Hash Engineering Solutions on 6/4/14.
@@ -36,7 +36,7 @@ public class Utils {
         {
             if(block == null || block.getHeader().getPrevBlockHash().equals(Sha256Hash.ZERO_HASH))
                 return null;
-            if(DigitalcoinParams.getAlgo(block.getHeader()) == algo)
+            if(AbstractBitcoinNetParams.getAlgo(block.getHeader()) == algo)
                 return block;
             try {
                 block = block.getPrev(blockStore);
@@ -61,7 +61,7 @@ public class Utils {
         {
             try {
                 block = block.getPrev(blockStore);
-                block = getLastBlockForAlgo(block, DigitalcoinParams.getAlgo(currentBlock.getHeader()), blockStore);
+                block = getLastBlockForAlgo(block, AbstractBitcoinNetParams.getAlgo(currentBlock.getHeader()), blockStore);
                 if(block == null)
                     return 0.0;
             }
