@@ -16,8 +16,8 @@ public class CoinDefinition {
     public static final String coinName = "digitalcoin";
     public static final String coinTicker = "DGC";
     public static final String coinURIScheme = "digitalcoin";
-    public static final String cryptsyMarketId = "26";
-    public static final String cryptsyMarketCurrency = "BTC";
+    //public static final String cryptsyMarketId = "26";
+    //public static final String cryptsyMarketCurrency = "BTC";
     public static final String PATTERN_PRIVATE_KEY_START = "6";
     public static final String PATTERN_PRIVATE_KEY_START_COMPRESSED = "[Q]";
     public static final String PATTERN_PRIVATE_KEY_START_TESTNET = "9";
